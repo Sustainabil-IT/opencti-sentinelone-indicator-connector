@@ -21,7 +21,7 @@ S1_CONVERSIONS = {
     "url:value": "URL",
     "ipv4-addr:value": "IPV4",
     "domain-name:value": "DNS",
-    "hostname:value": "DNS", 
+    "hostname:value": "DNS",
     "file:hashes.'SHA-256'": "SHA256",
     "file:hashes.MD5": "MD5",
     "file:hashes.'SHA-1'": "SHA1",
@@ -56,9 +56,13 @@ class IndicatorStreamConnector:
             "SENTINELONE_ACCOUNT_ID", ["sentinelOne", "account_id"], config
         )
 
-        self.max_api_attempts = int(get_config_variable(
-            "SENTINELONE_MAX_API_ATTEMPTS", ["sentinelOne", "max_api_attempts"], config
-        ))
+        self.max_api_attempts = int(
+            get_config_variable(
+                "SENTINELONE_MAX_API_ATTEMPTS",
+                ["sentinelOne", "max_api_attempts"],
+                config,
+            )
+        )
 
         self.helper.log_info("Initialised Connector.")
 
@@ -163,16 +167,13 @@ class IndicatorStreamConnector:
             except KeyError:
                 # Handle unsupported key
                 unsupported_type = match.group(1)
-                if unsupported_type not in ignored_types:
-                    ignored_types.append(unsupported_type)
-                    ignored_types_example_patterns.append(match.group(2))
                 self.helper.log_error(
                     f"Unsupported Type: '{unsupported_type}' found in pattern. Type is not supported by SentinelOne."
                 )
             except Exception as e:
                 # Keep other exception handling
                 self.helper.log_error(f"Error converting Type, Exception Error: {e}")
-        
+
         return (None, None)
 
     def create_payload(self, ioc_type, ioc_value, indicator):
@@ -182,11 +183,11 @@ class IndicatorStreamConnector:
         try:
             possible_entries = {
                 "name": indicator.get("name"),
-                #"category": (
+                # "category": (
                 #    " | ".join(indicator.get("objectLabel", []))
                 #    if indicator.get("objectLabel")
                 #    else None
-                #),
+                # ),
                 "pattern": indicator.get("pattern"),
                 "patternType": indicator.get("pattern_type"),
                 "source": self.connector_name,
