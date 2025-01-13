@@ -246,7 +246,7 @@ class IndicatorStreamConnector:
                     time.sleep(new_wait_time)
                     return self.send_payload(payload, new_wait_time, attempts + 1)
                 else:
-                    self.helper.log_debug(
+                    self.helper.log_error(
                         f"Error, unable to send Payload to SentinelOne after: {self.max_api_attempts} attempts, please check your configuration."
                     )
                     return False
