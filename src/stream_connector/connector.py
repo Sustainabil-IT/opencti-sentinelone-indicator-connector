@@ -1,14 +1,10 @@
-import json
-import os
 import re
-import time
 
 import requests
-import stix2
-import yaml
-from pycti import Identity, OpenCTIConnectorHelper, get_config_variable
+from pycti import OpenCTIConnectorHelper
 
-# The api location for posting IOCS to SentinelOne
+from .config_variables import ConfigConnector
+
 IOC_API_LOCATION = "web/api/v2.1/threat-intelligence/iocs?accountIds="
 
 # The regex pattern for searching for (type,value) pairs in a stix2.1 pattern.
@@ -26,54 +22,90 @@ S1_CONVERSIONS = {
     "file:hashes.'SHA-1'": "SHA1",
 }
 
+###bit confused about the conversions here! found these:
+# [file:hashes.'SHA-1' = 'a7f075ba37961545ae0a819bda5d2be28618d60d']
+# [file:hashes.'SHA-256' = 'b3ad8409d82500e790e6599337abe4d6edf5bd4c6737f8357d19edd82c88b064']
+# [file:hashes.'SHA-256' = '326d05c29c46e6ca7f2f1a9b534d8a2ffb98a13f74f8f26fff2057ad1f8e0ca8']
+
+
+import json
+
+###remove:
+import time
+
 
 class IndicatorStreamConnector:
-    def __init__(self, config_data):
-        self.connector_name = get_config_variable(
-            "CONNECTOR_NAME", ["connector", "name"], config
-        ).upper()
+    """
+    Specifications of the Stream connector
 
-        self.helper = OpenCTIConnectorHelper(config_data)
+    This class encapsulates the main actions, expected to be run by any stream connector.
+    Note that the attributes defined below will be complemented per each connector type.
+    This type of connector has the capability to listen to live streams from the OpenCTI platform.
+    It is highly useful for creating connectors that can react and make decisions in real time.
+    Actions on OpenCTI will apply the changes to the third-party connected platform
+    ---
 
-        self.author = stix2.Identity(
-            id=Identity.generate_id(self.connector_name, "organization"),
-            name=self.connector_name,
-            identity_class="organization",
-        )
+    Attributes
+        - `config (ConfigConnector())`:
+            Initialize the connector with necessary configuration environment variables
 
-        self.s1_url = get_config_variable(
-            "SENTINELONE_URL", ["sentinelOne", "url"], config
-        )
-        self.s1_api_key = "APIToken " + (
-            get_config_variable(
-                "SENTINELONE_API_KEY", ["sentinelOne", "api_key"], config
-            )
-            or ""
-        )
+        - `helper (OpenCTIConnectorHelper(config))`:
+            This is the helper to use.
+            ALL connectors have to instantiate the connector helper with configurations.
+            Doing this will do a lot of operations behind the scene.
 
-        self.s1_account_id = get_config_variable(
-            "SENTINELONE_ACCOUNT_ID", ["sentinelOne", "account_id"], config
-        )
+    ---
 
-        self.max_api_attempts = int(
-            get_config_variable(
-                "SENTINELONE_MAX_API_ATTEMPTS",
-                ["sentinelOne", "max_api_attempts"],
-                config,
-            )
-        )
+    Best practices
+        - `self.helper.connector_logger.[info/debug/warning/error]` is used when logging a message
 
-        self.helper.log_info("Initialised Connector.")
+    """
 
-    def start(self):
-        self.helper.log_info(self.helper.get_state())
-        self.helper.listen_stream(self.handle_message)
-
-    def handle_message(self, msg):
+    def __init__(self):
         """
-        Filter all messages to find new Indicators; process them when found.
+        Initialize the Connector with necessary configurations
         """
+
+        # Load configuration file and connection helper
+        self.config = ConfigConnector()
+        self.helper = OpenCTIConnectorHelper(self.config.load)
+
+        self.helper.log_debug("Initialised Connector.")
+
+    def check_stream_id(self) -> None:
+        """
+        In case of stream_id configuration is missing, raise Value Error
+        :return: None
+        """
+        if (
+            self.helper.connect_live_stream_id is None
+            or self.helper.connect_live_stream_id == "ChangeMe"
+        ):
+            raise ValueError("Missing stream ID, please check your configurations.")
+
+    def process_message(self, msg) -> None:
+        """
+        Main process if connector successfully works
+        The data passed in the data parameter is a dictionary with the following structure as shown in
+        https://docs.opencti.io/latest/development/connectors/#additional-implementations
+        :param msg: Message event from stream
+        :return: string
+        """
+        try:
+            self.check_stream_id()
+
+        except Exception:
+            raise ValueError("Cannot process the message")
+
+        # Performing the main process
+        # ===========================
+        # === Add your code below ===
+        # ===========================
+
+        # EXAMPLE
+        # Handle creation
         if msg.event == "create":
+            # self.helper.connector_logger.info("[CREATE]")
             message_dict = json.loads(msg.data)
 
             if "creates a Indicator" in message_dict["message"]:
@@ -83,9 +115,35 @@ class IndicatorStreamConnector:
                 )
 
                 if not self.process_indicator(indicator_id):
+
                     self.helper.log_error(
                         f"Error, Failed to process Indicator with id: {indicator_id}"
                     )
+
+        # Handle update
+        # if msg.event == "update":
+        # self.helper.connector_logger.info("[UPDATE]")
+        # Do something
+        # raise NotImplementedError
+
+        # Handle delete
+        # if msg.event == "delete":
+        # self.helper.connector_logger.info("[DELETE]")
+        # Do something
+        # raise NotImplementedError
+
+        # ===========================
+        # === Add your code above ===
+        # ===========================
+
+    def run(self) -> None:
+        """
+        Run the main process in self.helper.listen() method
+        The method continuously monitors messages from the platform
+        The connector have the capability to listen a live stream from the platform.
+        The helper provide an easy way to listen to the events.
+        """
+        self.helper.listen_stream(message_callback=self.process_message)
 
     def process_indicator(self, indicator_id):
         """
@@ -161,6 +219,9 @@ class IndicatorStreamConnector:
             ioc_value = match.group(2).strip('"').strip("]").strip("'")
             try:
                 ioc_type = S1_CONVERSIONS[match.group(1)]
+
+                self.helper.log_debug(pattern)
+
                 self.helper.log_debug("Success, Type converted to SentinelOne format.")
                 return ioc_type, ioc_value
             except KeyError:
@@ -189,7 +250,7 @@ class IndicatorStreamConnector:
                 # ),
                 "pattern": indicator.get("pattern"),
                 "patternType": indicator.get("pattern_type"),
-                "source": self.connector_name,
+                "source": self.config.connector_name,
                 "description": indicator.get("description"),
                 "validUntil": indicator.get("valid_until"),
                 "externalId": indicator.get("id"),
@@ -204,7 +265,7 @@ class IndicatorStreamConnector:
 
             payload = {
                 "data": [valid_entries],
-                "filter": {"tenant": False, "accountIds": [self.s1_account_id]},
+                "filter": {"tenant": False, "accountIds": [self.config.s1_account_id]},
             }
             return json.dumps(payload)
 
@@ -227,14 +288,14 @@ class IndicatorStreamConnector:
         HEADERS = {
             "Content-Type": "application/json",
             "Accept": "application/json",
-            "Authorization": self.s1_api_key,
+            "Authorization": self.config.s1_api_key,
         }
 
         try:
             url = (
-                self.s1_url
+                self.config.s1_url
                 + "/web/api/v2.1/threat-intelligence/iocs?accountIds="
-                + self.s1_account_id
+                + self.config.s1_account_id
             )
             response = requests.post(url, headers=HEADERS, data=payload)
             if response.status_code == 429:
@@ -247,7 +308,7 @@ class IndicatorStreamConnector:
                     return self.send_payload(payload, new_wait_time, attempts + 1)
                 else:
                     self.helper.log_error(
-                        f"Error, unable to send Payload to SentinelOne after: {self.max_api_attempts} attempts, please check your configuration."
+                        f"Error, unable to send Payload to SentinelOne after: {self.config.max_api_attempts} attempts, please check your configuration."
                     )
                     return False
 
@@ -270,14 +331,3 @@ class IndicatorStreamConnector:
         except Exception as e:
             self.helper.log_error(f"Exception Error, {e}.")
         return False
-
-
-if __name__ == "__main__":
-    config_file_path = os.path.dirname(os.path.abspath(__file__)) + "/config.yml"
-    config = (
-        yaml.load(open(config_file_path), Loader=yaml.FullLoader)
-        if os.path.isfile(config_file_path)
-        else {}
-    )
-    connector = IndicatorStreamConnector(config)
-    connector.start()

@@ -4,4 +4,4 @@
 cd /opt/connector-sentinel-one-indicator
 
 # Launch the connector
-python3 indicator_stream.py
+python3 main.py

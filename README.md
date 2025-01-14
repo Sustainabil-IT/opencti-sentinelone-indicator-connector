@@ -76,11 +76,11 @@ It is best practice to create a new user under the `Connectors` group and to use
 
 - To create a dedicated stream for this connector head to `Data sharing` -> `Live streams` in the OpenCTI platform.
 
-![Generating A User In OpenCTI](doc/stream_creation.png)
+![Creating a Stream in OpenCTI](doc/stream_creation.png)
 
 - Give the stream a name so that it can be identified
 - Optional filters can be applied to determine what kind of data goes into the connector. It is recommended to not set any filters as to allow SentinelOne to consume all types it can.
-- You can then copy the streams ID to be you used in your environment variables. 
+- Copy the streams ID to be you used in your environment variables. 
 
 
 <br>
