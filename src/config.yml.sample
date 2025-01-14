@@ -4,7 +4,7 @@ opencti:
 
 connector:
   id: 'ChangeMe'
-  type: 'INTERNAL_IMPORT_FILE'
+  type: 'STREAM'
   name: 'Internal Import File Connector Template'
   scope: 'ChangeMe'
   log_level: 'info'
