@@ -121,7 +121,6 @@ It is best practice to create a new user under the `Connectors` group and to use
 
 The following are required parameters that are necessary for your connector to function.
 
-<br>
 
 
 ### OpenCTI Parameters
