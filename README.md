@@ -4,18 +4,32 @@ This connector works autonomously to allow Indicators created within the attache
 
 <br>
 
-This software is provided as a community-driven project and is not officially supported by SentinelOne. It is offered on an "as-is" basis, without warranties or guarantees, either express or implied. Users are encouraged to thoroughly test and validate the software before deploying it in their environments. While community contributions and feedback are welcome, SentinelOne does not provide formal technical support, maintenance, or updates for this project.
+**Note:** 
+<strong>This software is provided as a community-driven project and is not officially supported by SentinelOne. It is offered on an "as-is" basis, without warranties or guarantees, either express or implied. Users are encouraged to thoroughly test and validate the software before deploying it in their environments. While community contributions and feedback are welcome, SentinelOne does not provide formal technical support, maintenance, or updates for this project.</strong>
 
 <br>
 
-**Note:** 
+
+
+
+
+
+## Connector Features and Notes
+
+- Optional logging that will provide you with the UUIDs SentinelOne generates for Indicators upon a successful bundle pushing can be enabled by setting the `LOG_S1_RESPONSE` variable in the docker-compose file to `true`. This feature will allow you to confirm the presence of Indicators in your SentinelOne instance.
+
+- Real-time monitoring capabilities with basic statistics are available at the `info` log level, allowing you to see how many Indicators have been pushed in the current session.
+
+- Detailed troubleshooting information is also available at `debug` log level in case of Error.
+
+<br>
+
 This version of the connector:
-- supports STIX patterns.
-- allows for pushing to SentinelOne accounts.
+- only supports STIX patterns.
+- only allows for pushing to SentinelOne accounts.
 
 <br>
 
-**Note:** 
 SentinelOne will only accept Indicators of the following types:
 - SHA-256 File Hash
 - SHA-1 File Hash
@@ -25,15 +39,7 @@ SentinelOne will only accept Indicators of the following types:
 - DNS Domain Name
         
 
-<br>
 
-## Use Case and Extras
-
-- Optional logging that will provide you with the UUIDs SentinelOne generates for Indicators upon a successful bundle pushing can be enabled by setting the `LOG_S1_RESPONSE` variable in the docker-compose file to `true`. This feature will allow you to confirm the presence of Indicators in your SentinelOne instance.
-
-- Real-time monitoring capabilities with basic statistics are available at the `info` log level, allowing you to see how many Indicators have been pushed in the current session.
-
-- Detailed troubleshooting information is also available at `debug` log level in case of Error.
 
 
 <br>
