@@ -1,76 +1,32 @@
 import re
-
 import requests
-from pycti import OpenCTIConnectorHelper
-
-from .config_variables import ConfigConnector
-
-IOC_API_LOCATION = "web/api/v2.1/threat-intelligence/iocs?accountIds="
-
-# The regex pattern for searching for (type,value) pairs in a stix2.1 pattern.
-PATTERN_RE = r"\[([\w:-]+(?:\.[\w-]+)?)\s*=\s*'([^']+)'\]"
-
-# Conversions to Type format accepted by SentinelOne API
-# Only support these types in S1.
-S1_CONVERSIONS = {
-    "url:value": "URL",
-    "ipv4-addr:value": "IPV4",
-    "domain-name:value": "DNS",
-    "hostname:value": "DNS",
-    "file:hashes.'SHA-256'": "SHA256",
-    "file:hashes.MD5": "MD5",
-    "file:hashes.'SHA-1'": "SHA1",
-}
-
-###bit confused about the conversions here! found these:
-# [file:hashes.'SHA-1' = 'a7f075ba37961545ae0a819bda5d2be28618d60d']
-# [file:hashes.'SHA-256' = 'b3ad8409d82500e790e6599337abe4d6edf5bd4c6737f8357d19edd82c88b064']
-# [file:hashes.'SHA-256' = '326d05c29c46e6ca7f2f1a9b534d8a2ffb98a13f74f8f26fff2057ad1f8e0ca8']
-
-
 import json
-
-###remove:
 import time
+import threading
+
+from pycti import OpenCTIConnectorHelper
+from config_variables import ConfigConnector
+from s1_client import S1Client
+
+MAX_BUFFER_SIZE = 20
+SENDOFF_TIME = 5
+
+
+
+PATTERN_RE =r"(?:file:hashes\.('SHA-256'|'SHA-1'|MD5)|url:value|ipv4-addr:value|domain-name:value|hostname:value)\s*[:=]\s*['\"]([^'\"]+)['\"]"
 
 
 class IndicatorStreamConnector:
-    """
-    Specifications of the Stream connector
-
-    This class encapsulates the main actions, expected to be run by any stream connector.
-    Note that the attributes defined below will be complemented per each connector type.
-    This type of connector has the capability to listen to live streams from the OpenCTI platform.
-    It is highly useful for creating connectors that can react and make decisions in real time.
-    Actions on OpenCTI will apply the changes to the third-party connected platform
-    ---
-
-    Attributes
-        - `config (ConfigConnector())`:
-            Initialize the connector with necessary configuration environment variables
-
-        - `helper (OpenCTIConnectorHelper(config))`:
-            This is the helper to use.
-            ALL connectors have to instantiate the connector helper with configurations.
-            Doing this will do a lot of operations behind the scene.
-
-    ---
-
-    Best practices
-        - `self.helper.connector_logger.[info/debug/warning/error]` is used when logging a message
-
-    """
-
     def __init__(self):
-        """
-        Initialize the Connector with necessary configurations
-        """
-
-        # Load configuration file and connection helper
         self.config = ConfigConnector()
         self.helper = OpenCTIConnectorHelper(self.config.load)
-
+        self.s1_client = S1Client(self.config, self.helper)
+        self.buffer = []
+        self.last_indicator_time = time.time()
+        self.buffer_lock = threading.Lock()  # Add thread safety
         self.helper.log_debug("Initialised Connector.")
+
+
 
     def check_stream_id(self) -> None:
         """
@@ -83,124 +39,182 @@ class IndicatorStreamConnector:
         ):
             raise ValueError("Missing stream ID, please check your configurations.")
 
+
+
+    def check_buffer_periodically(self):
+        """
+        Periodically check if buffer needs to be sent due to time threshold
+        """
+        while True:
+            time.sleep(1)  # Check every second
+            current_time = time.time()
+            with self.buffer_lock:
+                if (len(self.buffer) > 0 and 
+                    current_time - self.last_indicator_time > SENDOFF_TIME):
+                    self.helper.log_info(
+                        f"No new indicators in the last {SENDOFF_TIME} seconds, "
+                        f"sending off buffer of size {len(self.buffer)}."
+                    )
+                    self.send_buffer()
+                    self.buffer.clear()
+
     def process_message(self, msg) -> None:
         """
-        Main process if connector successfully works
-        The data passed in the data parameter is a dictionary with the following structure as shown in
-        https://docs.opencti.io/latest/development/connectors/#additional-implementations
-        :param msg: Message event from stream
-        :return: string
+        Process incoming messages from the stream
+        :param msg: Message object containing event and data
+        :return: None
         """
         try:
             self.check_stream_id()
-
         except Exception:
             raise ValueError("Cannot process the message")
 
-        # Performing the main process
-        # ===========================
-        # === Add your code below ===
-        # ===========================
-
-        # EXAMPLE
-        # Handle creation
+        current_time = time.time()
         if msg.event == "create":
-            # self.helper.connector_logger.info("[CREATE]")
             message_dict = json.loads(msg.data)
-
             if "creates a Indicator" in message_dict["message"]:
-                indicator_id = message_dict["data"]["id"]
-                self.helper.log_info(
-                    "New indicator to process found with id: {indicator_id}"
-                )
+                self.helper.log_debug("New indicator to process found.")
+                with self.buffer_lock:  # Add thread safety
+                    if self.process_indicator(message_dict):
+                        self.last_indicator_time = current_time
+                    
+                    if (len(self.buffer) >= MAX_BUFFER_SIZE):
+                        self.helper.log_info(
+                            f"Buffer of Indicators reached count of {MAX_BUFFER_SIZE}, "
+                            "sending to SentinelOne."
+                        )
+                        self.send_buffer()
+                        self.buffer.clear()
 
-                if not self.process_indicator(indicator_id):
-
-                    self.helper.log_error(
-                        f"Error, Failed to process Indicator with id: {indicator_id}"
-                    )
-
-        # Handle update
-        # if msg.event == "update":
-        # self.helper.connector_logger.info("[UPDATE]")
-        # Do something
-        # raise NotImplementedError
-
-        # Handle delete
-        # if msg.event == "delete":
-        # self.helper.connector_logger.info("[DELETE]")
-        # Do something
-        # raise NotImplementedError
-
-        # ===========================
-        # === Add your code above ===
-        # ===========================
-
-    def run(self) -> None:
+    def send_buffer(self) -> bool:
         """
-        Run the main process in self.helper.listen() method
-        The method continuously monitors messages from the platform
-        The connector have the capability to listen a live stream from the platform.
-        The helper provide an easy way to listen to the events.
+        Send the buffer to SentinelOne
+        :return: bool: True if buffer was sent successfully, False if send failed
         """
-        self.helper.listen_stream(message_callback=self.process_message)
+        self.helper.log_info(f"Attempting to send buffer of Indicators to SentinelOne")
 
-    def process_indicator(self, indicator_id):
-        """
-        Process an OpenCTI Indicator into SentinelOne IOC form and publish it, following:
-            Stage 1: retrieve Indicator from OpenCTI
-            Stage 2: Extract Type and Value From Stix Pattern
-            Stage 3: Create SentinelOne API Payload with this Information
-            Stage 4: Send Payload to SentinelOne (upload the ioc)
-        """
-
-        try:
-            self.helper.log_debug("Attempting to retrieve Indicator from OpenCTI")
-            indicator = self.helper.api.indicator.read(id=indicator_id)
-            if not indicator:
-                self.helper.log_error(
-                    f"Error, unable to retrieve Indicator with id {indicator_id} from OpenCTI Instance"
-                )
-                return False
-
-            self.helper.log_debug("Success, Indicator retrieved")
-            self.helper.log_debug("Attempting to extract Type and Value from pattern")
-
-            ioc_type, ioc_value = self.extract_content(indicator["pattern"])
-            if (ioc_type, ioc_value) == (None, None):
-                self.helper.log_error(
-                    "Error, unable to retrieve and format Type and Value from pattern"
-                )
-                return False
-
-            self.helper.log_info("Success, Type and Value retrieved and formatted.")
-            self.helper.log_debug("Attempting to create IOC Payload for SentinelOne")
-
-            payload = self.create_payload(ioc_type, ioc_value, indicator)
-            if not payload:
-                self.helper.log_error("Error, unable to create Sentinelone Payload.")
-                return False
-
-            self.helper.log_info("Success, Sentinelone Payload created.")
-            self.helper.log_debug("Attempting to send Payload to SentinelOne")
-
-            if self.send_payload(payload):
-                self.helper.log_info(
-                    "Success, Payload sent to SentinleOne, IOC uploaded."
-                )
-                return True
-            else:
-                self.helper.log_error("Error, unable to send Payload to SentinelOne.")
-                return False
-
-        except Exception as e:
-            self.helper.log_error(f"Indicator Stream Failed with Exception Error, {e}")
+        payload = self.s1_client.create_payload(self.buffer)
+        if self.s1_client.send_buffer(payload):
+            self.helper.log_info(f"Buffer of Indicators sent successfully to SentinelOne")
+            time.sleep(3)
+            return True
+        else:
+            self.helper.log_error(f"Buffer of Indicators failed to send to SentinelOne")
             return False
 
-    def extract_content(self, pattern):
+    def process_indicator(self, message_dict) -> bool:
         """
-        Extracts the Type and Value from a stix2.1 Pattern. Formats Type in S1 Case.
+        :param message_dict: Dictionary containing message data.
+        :return: bool: True if indicator was processed successfully, False if not
         """
+        ioc_type = None
+        ioc_value = None
+
+        for extension_id, extension_data in message_dict.get("data",{}).get("extensions",{}).items():
+            # Get observable_values list, default to empty list if not found
+            observable_values_list = extension_data.get("observable_values", [])
+            # Only process if list is not empty
+            if observable_values_list:
+                observable_values = observable_values_list[0]
+                ioc_type, ioc_value = self.extract_indicator_type_value(observable_values)
+                if ioc_type is not None and ioc_value is not None:
+                    break
+
+        if ioc_type is None or ioc_value is None:
+            self.helper.log_info("IOC is of an unsupported type, skipping.")
+            return False
+
+        indicator_data = message_dict.get("data",{})
+        payload = self.create_indicator_payload(indicator_data, ioc_type, ioc_value)
+        self.buffer.append(payload)
+        self.helper.log_info(f"IOC extracted successfully, added to buffer of size: {len(self.buffer)}")
+        time.sleep(0.3)
+        return True
+
+    def create_indicator_payload(self, indicator_data, ioc_type, ioc_value) -> dict:
+        """
+        Create payload dictionary from indicator data
+        :param indicator_data: Dictionary containing raw indicator data
+        :param ioc_type: String containing the type of indicator
+        :param ioc_value: String containing the value of indicator
+        :return: dict: Formatted payload with valid entries
+        """
+        possible_entries = {
+            "type": ioc_type,
+            "value": ioc_value,
+
+            #TODO: maybe implmeent determination method
+            "method": "EQUALS",
+
+            "name": indicator_data.get("name"),
+            "description": indicator_data.get("description"),
+            "externalId": indicator_data.get("id"),
+
+            "pattern": indicator_data.get("pattern"),
+            "patternType": indicator_data.get("pattern_type"),
+
+            ###FIX
+            "labels": indicator_data.get("labels"),
+
+
+            "source": self.config.connector_name,
+            "validUntil": indicator_data.get("valid_until"),
+            "creationTime": indicator_data.get("created"),
+
+            ###FIX
+            "creator": "OpenCTI Indicator Stream Connector"
+
+        }
+        valid_entries = {k: v for k, v in possible_entries.items() if v is not None}
+        return valid_entries
+
+    def extract_indicator_type_value(self, observable_values) -> tuple[str, str]:
+        """
+        Extract indicator type and value from observable values
+        :param observable_values: Dictionary containing observable values
+        :return: tuple[str, str]: Indicator type and value, or (None, None) if not found
+        """
+        indicator_type = None
+        indicator_value = None
+        
+        val = observable_values.get("hashes",{}).get("SHA-1")
+        if val:
+            indicator_type = "SHA1"
+            indicator_value = val
+
+        val =  observable_values.get("hashes",{}).get("SHA-256")
+        if val:
+            indicator_type = "SHA256"
+            indicator_value = val
+        
+        val =  observable_values.get("hashes",{}).get("MD5")
+        if val:
+            indicator_type = "MD5"
+            indicator_value = val
+
+
+
+        
+        val =  observable_values.get("type","") == "IPv4-Addr"
+        if val:
+            indicator_type = "IPV4"
+            indicator_value = observable_values.get("value","")
+        
+        val = observable_values.get("type","") == "Domain-Name"
+        if val:
+            indicator_type = "DNS"
+            indicator_value = observable_values.get("value","")
+        
+        val =  observable_values.get("type","") == "Url"
+        if val:
+            indicator_type = "URL"
+            indicator_value = observable_values.get("value","")
+
+        return indicator_type, indicator_value
+
+    """
+    ##TODO: regex wont work for this logic. rewrite it.
+    def extract_indicator_type_value_fallback(self, pattern) -> tuple[str, str]:
 
         match = re.search(PATTERN_RE, pattern)
         if not match:
@@ -236,98 +250,28 @@ class IndicatorStreamConnector:
 
         return (None, None)
 
-    def create_payload(self, ioc_type, ioc_value, indicator):
+    """
+
+
+                
+    def run(self) -> None:
         """
-        Creates a formatted payload for S1 API post request, excluding fields if they are missing.
+        Run the main process in self.helper.listen() method
+        The method continuously monitors messages from the platform
+        The connector have the capability to listen a live stream from the platform.
+        The helper provide an easy way to listen to the events.
         """
-        try:
-            possible_entries = {
-                "name": indicator.get("name"),
-                # "category": (
-                #    " | ".join(indicator.get("objectLabel", []))
-                #    if indicator.get("objectLabel")
-                #    else None
-                # ),
-                "pattern": indicator.get("pattern"),
-                "patternType": indicator.get("pattern_type"),
-                "source": self.config.connector_name,
-                "description": indicator.get("description"),
-                "validUntil": indicator.get("valid_until"),
-                "externalId": indicator.get("id"),
-                "creationTime": indicator.get("created"),
-                "creator": indicator.get("creators", [])[0].get("name"),
-                "type": ioc_type,
-                "value": ioc_value,
-                "method": "EQUALS",
-            }
+        # Start the buffer checking thread
+        buffer_thread = threading.Thread(
+            target=self.check_buffer_periodically, 
+            daemon=True
+        )
+        buffer_thread.start()
+        
+        # Start listening for messages
+        self.helper.listen_stream(message_callback=self.process_message)
 
-            valid_entries = {k: v for k, v in possible_entries.items() if v is not None}
 
-            payload = {
-                "data": [valid_entries],
-                "filter": {"tenant": False, "accountIds": [self.config.s1_account_id]},
-            }
-            return json.dumps(payload)
-
-        except Exception as e:
-            self.helper.log_error(f"Exception occurred while creating payload: {e}")
-            return None
-
-    def send_payload(self, payload, wait_time=1, attempts=0):
-        """
-        Attempts to send IOC Payload to SentinelOne via API
-        """
-
-        def calculate_exponential_delay(last_wait_time):
-            """
-            Returns a delay between API Requests ('exponential' required by S1)
-            very basic for now.
-            """
-            return last_wait_time * 2
-
-        HEADERS = {
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-            "Authorization": self.config.s1_api_key,
-        }
-
-        try:
-            url = (
-                self.config.s1_url
-                + "/web/api/v2.1/threat-intelligence/iocs?accountIds="
-                + self.config.s1_account_id
-            )
-            response = requests.post(url, headers=HEADERS, data=payload)
-            if response.status_code == 429:
-                if attempts < self.config.max_api_attempts:
-                    new_wait_time = calculate_exponential_delay(wait_time)
-                    self.helper.log_debug(
-                        f"Too many requests to S1, waiting: {new_wait_time} seconds"
-                    )
-                    time.sleep(new_wait_time)
-                    return self.send_payload(payload, new_wait_time, attempts + 1)
-                else:
-                    self.helper.log_error(
-                        f"Error, unable to send Payload to SentinelOne after: {self.config.max_api_attempts} attempts, please check your configuration."
-                    )
-                    return False
-
-            if response.status_code != 200:
-                self.helper.log_error(
-                    f"Error, Request got Response: {response.status_code}"
-                )
-                self.helper.log_debug(f"URL Used: {url}")
-                self.helper.log_debug(
-                    f"S1 responded with: {response.text} to {payload}"
-                )
-                return False
-
-            self.helper.log_debug("Success, Payload sent")
-            self.helper.log_info(
-                f"IOC External Id: {response.json().get("data",[])[0].get("externalId","unknown")}"
-            )
-            return True
-
-        except Exception as e:
-            self.helper.log_error(f"Exception Error, {e}.")
-        return False
+if __name__ == "__main__":
+    connector = IndicatorStreamConnector()
+    connector.run()
