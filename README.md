@@ -24,13 +24,13 @@ This connector works autonomously to allow Indicators created within the attache
 
 <br>
 
-This version of the connector:
+####This version of the connector:
 - only supports STIX patterns.
 - only allows for pushing to SentinelOne accounts.
 
 <br>
 
-SentinelOne will only accept Indicators of the following types:
+####SentinelOne will only accept Indicators of the following types:
 - SHA-256 File Hash
 - SHA-1 File Hash
 - MD5 File Hash
@@ -181,13 +181,13 @@ It is best practice to create a new user under the `Connectors` group and to use
 
 ### SentinelOne Parameters
 
-#### SENTINELONE_URL
+##### SENTINELONE_URL
 - Description: The SentinelOne platform URL. **NOTE:** The URL should not end with a `/`.
 - Example: `https://usea1-purple.sentinelone.net`
 - Environment Variable: `SENTINELONE_URL`
 - Config.yml: `url`
 
-#### SENTINELONE_API_KEY
+##### SENTINELONE_API_KEY
 - Description: The API key for your SentinelOne account (JWT). **NOTE:** Should not include `APIToken`.
 - Example: `eyJraWQiO...`
 - Environment Variable: `SENTINELONE_API_KEY`
