@@ -16,6 +16,8 @@ This connector works autonomously to allow Indicators created within the attache
 
 ## Connector Features and Notes
 
+<br>
+
 - Optional logging that will provide you with the UUIDs SentinelOne generates for Indicators upon a successful bundle pushing can be enabled by setting the `LOG_S1_RESPONSE` variable in the docker-compose file to `true`. This feature will allow you to confirm the presence of Indicators in your SentinelOne instance.
 
 - Real-time monitoring capabilities with basic statistics are available at the `info` log level, allowing you to see how many Indicators have been pushed in the current session.
@@ -23,14 +25,14 @@ This connector works autonomously to allow Indicators created within the attache
 - Detailed troubleshooting information is also available at `debug` log level in case of Error.
 
 <br>
-###test
-####This version of the connector:
+
+#### This version of the connector:
 - only supports STIX patterns.
 - only allows for pushing to SentinelOne accounts.
 
 <br>
 
-####SentinelOne will only accept Indicators of the following types:
+#### SentinelOne will only accept Indicators of the following types:
 - SHA-256 File Hash
 - SHA-1 File Hash
 - MD5 File Hash
@@ -116,12 +118,7 @@ It is best practice to create a new user under the `Connectors` group and to use
 <br>
 
 ## Configuration
-
-<br>
-
-
 ### OpenCTI Parameters
-
 ##### OPENCTI_URL
 - Description: The URL of your OpenCTI instance within its internal network.
 - Example: `http://opencti:8080`
