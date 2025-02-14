@@ -23,7 +23,7 @@ This connector works autonomously to allow Indicators created within the attache
 - Detailed troubleshooting information is also available at `debug` log level in case of Error.
 
 <br>
-
+###test
 ####This version of the connector:
 - only supports STIX patterns.
 - only allows for pushing to SentinelOne accounts.
@@ -117,15 +117,18 @@ It is best practice to create a new user under the `Connectors` group and to use
 
 ## Configuration
 
+<br>
+
+
 ### OpenCTI Parameters
 
-#### OPENCTI_URL
+##### OPENCTI_URL
 - Description: The URL of your OpenCTI instance within its internal network.
 - Example: `http://opencti:8080`
 - Environment Variable: `OPENCTI_URL`
 - Config.yml: `url`
 
-#### OPENCTI_TOKEN  
+##### OPENCTI_TOKEN  
 - Description: The token of the user specifically created for this Connector, under the `Connectors` group.
 - Example: `11111111-2222-3333-4444-555555555555`
 - Environment Variable: `OPENCTI_TOKEN`
@@ -135,43 +138,43 @@ It is best practice to create a new user under the `Connectors` group and to use
 
 ### Connector Parameters
 
-#### CONNECTOR_ID
+##### CONNECTOR_ID
 - Description: Unique UUIDv4 identifier for the connector.
 - Example: `11111111-2222-3333-4444-555555555555`
 - Environment Variable: `CONNECTOR_ID`
 - Config.yml: `id`
 
-#### CONNECTOR_NAME
+##### CONNECTOR_NAME
 - Description: The Connector's name as it will appear in OpenCTI.
 - Example: `SentinelOne Indicator Export Stream`
 - Environment Variable: `CONNECTOR_NAME`
 - Config.yml: `name`
 
-#### CONNECTOR_SCOPE
+##### CONNECTOR_SCOPE
 - Description: The scope applied to the connector.
 - Example: `all`
 - Environment Variable: `CONNECTOR_SCOPE`
 - Config.yml: `scope`
 
-#### CONNECTOR_LOG_LEVEL
+##### CONNECTOR_LOG_LEVEL
 - Description: The level of logs/outputs presented. `info` is recommended.
 - Example: `info`
 - Environment Variable: `CONNECTOR_LOG_LEVEL`
 - Config.yml: `log_level`
 
-#### CONNECTOR_LIVE_STREAM_ID
+##### CONNECTOR_LIVE_STREAM_ID
 - Description: The id of the stream to listen into, the default `live` is okay to use.
 - Example: `live`
 - Environment Variable: `CONNECTOR_LIVE_STREAM_ID`
 - Config.yml: `live_stream_id`
 
-#### CONNECTOR_LIVE_STREAM_LISTEN_DELETE
+##### CONNECTOR_LIVE_STREAM_LISTEN_DELETE
 - Description: Whether or not the connector will delete REDIS events after processing them.
 - Example: `true`
 - Environment Variable: `CONNECTOR_LIVE_STREAM_LISTEN_DELETE`
 - Config.yml: `live_stream_listen_delete`
 
-#### CONNECTOR_LIVE_STREAM_NO_DEPENDENCIES
+##### CONNECTOR_LIVE_STREAM_NO_DEPENDENCIES
 - Description: Determines whether the stream will require dependency on other entities.
 - Example: `true`
 - Environment Variable: `CONNECTOR_LIVE_STREAM_NO_DEPENDENCIES`
@@ -193,19 +196,19 @@ It is best practice to create a new user under the `Connectors` group and to use
 - Environment Variable: `SENTINELONE_API_KEY`
 - Config.yml: `api_key`
 
-#### SENTINELONE_ACCOUNT_ID
+##### SENTINELONE_ACCOUNT_ID
 - Description: The ID of your SentinelOne Account.
 - Example: `1234567890123456789`
 - Environment Variable: `SENTINELONE_ACCOUNT_ID`
 - Config.yml: `account_id`
 
-#### SENTINELONE_MAX_API_ATTEMPTS
+##### SENTINELONE_MAX_API_ATTEMPTS
 - Description: The maximum number of retry attempts when API requests to SentinelOne repeatedly fail. `5` is recommended.
 - Example: `5`
 - Environment Variable: `MAX_API_ATTEMPTS`
 - Config.yml: `max_api_attempts`
 
-#### LOG_S1_RESPONSE
+#####LOG_S1_RESPONSE
 - Description: Enabling this will log a list of UUIDs of the IOCs SentinelOne created for each bundle, allowing you to check their presence in your instance.
 - Example: `true`
 - Environment Variable: `LOG_S1_RESPONSE`
