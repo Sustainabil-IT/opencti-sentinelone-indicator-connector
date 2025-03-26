@@ -1,1 +1,1 @@
-pycti
+pycti==6.5.9
